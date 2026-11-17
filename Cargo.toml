@@ -1,0 +1,60 @@
+[package]
+name = "rs3fs"
+version = "1.0.0"
+edition = "2024"
+description = "A Windows file manager for S3-compatible object storage."
+license = "AGPL-3.0-only"
+
+[dependencies]
+anyhow = "1"
+chrono = "0.4"
+chrono-tz = "0.10"
+aws-smithy-types = { version = "1", features = ["http-body-1-x"] }
+http-body-util = "0.1"
+futures-util = "0.3"
+tokio-util = "0.7"
+base64 = "0.23"
+gpui-kit = { version = "=0.10.0", features = [
+    "tree-sitter-bash", "tree-sitter-css", "tree-sitter-html",
+    "tree-sitter-javascript", "tree-sitter-markdown", "tree-sitter-markdown-inline",
+    "tree-sitter-python", "tree-sitter-rust", "tree-sitter-toml",
+    "tree-sitter-tsx", "tree-sitter-typescript", "tree-sitter-yaml",
+] }
+tree-sitter-containerfile = "0.9.2"
+tree-sitter-powershell = "0.26.6"
+tree-sitter-typescript = "0.23.2"
+tree-sitter-xml = "0.7.0"
+aws-config = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio", "credentials-process", "sso"] }
+aws-sdk-s3 = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
+percent-encoding = "2"
+md-5 = "0.11"
+notify = "8.2"
+rfd = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "io-util", "fs", "macros", "process", "time"] }
+walkdir = "2"
+url = "2"
+uuid = { version = "1", features = ["serde", "v4"] }
+
+[target.'cfg(windows)'.dependencies]
+zip = { version = "4", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+roxmltree = "0.20"
+sha2 = "0.11"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "ico", "tiff"] }
+windows = { version = "0.62", features = ["Data_Pdf", "Storage_Streams", "Graphics_Imaging", "Win32_System_WinRT", "Win32_System_Com", "Win32_UI_Shell"] }
+windows-registry = "0.6.1"
+raw-window-handle = "0.6"
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security_Cryptography", "Win32_System_LibraryLoader", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Registry", "Win32_UI_Input_Touch", "Win32_UI_Shell", "Win32_UI_TabletPC", "Win32_UI_WindowsAndMessaging"] }
+cfb = "0.14"
+encoding_rs = "0.8"
+
+[profile.dev]
+debug = 0
+
+[target.'cfg(windows)'.dev-dependencies]
+tokio = { version = "1", features = ["signal"] }
+
+[build-dependencies]
+embed-resource = "3"

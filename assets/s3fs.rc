@@ -1,0 +1,33 @@
+#pragma code_page(65001)
+#include <winver.h>
+#include "s3fs-version.h"
+
+101 ICON "s3fs.ico"
+
+1 VERSIONINFO
+FILEVERSION S3FS_VERSION_NUMBERS
+PRODUCTVERSION S3FS_VERSION_NUMBERS
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "mcitem"
+            VALUE "ProductName", "rs3fs"
+            VALUE "FileDescription", "S3-compatible file manager"
+            VALUE "LegalCopyright", "Copyright © 2026 mcitem"
+            VALUE "FileVersion", S3FS_VERSION_STRING
+            VALUE "ProductVersion", S3FS_VERSION_STRING
+            VALUE "OriginalFilename", "rs3fs.exe"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

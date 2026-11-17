@@ -1,0 +1,13 @@
+/target/
+.env
+.env.*
+!.env.example
+/.aws/
+/connection.json
+/sync-jobs.json
+/sync-runs.json
+/transfer-journal-v1/
+*.pem
+*.key
+*.pfx
+*.p12
