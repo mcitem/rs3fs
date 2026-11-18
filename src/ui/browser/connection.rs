@@ -656,7 +656,7 @@ impl Browser {
             dialog
                 .confirm()
                 .title(title.clone())
-                .description("将从本机移除这套凭证。")
+                .description("此操作仅移除本机配置。")
                 .button_props(
                     DialogButtonProps::default()
                         .ok_text("删除")

@@ -53,7 +53,7 @@ impl Browser {
         cx.notify();
     }
 
-    fn save_preview_settings(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn save_preview_settings(&mut self, cx: &mut Context<Self>) {
         let result = (|| {
             let limit: u32 = self
                 .preview_limit_input
@@ -275,56 +275,53 @@ impl Browser {
                         ),
                     )
                     .child(
-                        Field::new()
-                            .label("隐藏点文件和点目录")
-                            .description("在文件树、文件列表和搜索中隐藏以点开头的文件与目录。")
-                            .child(
-                                Switch::new("hide-dot-entries")
-                                    .accessibility_label("隐藏点文件和点目录")
-                                    .checked(self.hide_dot_entries)
-                                    .on_change(cx.listener(|this, checked: &bool, _, cx| {
-                                        let result = DotEntrySettings::save(*checked);
-                                        if result.is_ok() {
-                                            this.hide_dot_entries = *checked;
-                                            if *checked {
-                                                if !this.has_pending_text_preview(cx)
-                                                    && this.preview.as_ref().is_some_and(
-                                                        |preview| is_dot_path(preview.entry.key()),
-                                                    )
-                                                {
-                                                    this.close_preview();
-                                                }
-                                                if this
-                                                    .create_draft
-                                                    .as_ref()
-                                                    .is_some_and(|draft| is_dot_path(&draft.prefix))
-                                                {
-                                                    this.create_draft = None;
-                                                }
+                        Field::new().label("隐藏点文件和点目录").child(
+                            Switch::new("hide-dot-entries")
+                                .accessibility_label("隐藏点文件和点目录")
+                                .checked(self.hide_dot_entries)
+                                .on_change(cx.listener(|this, checked: &bool, _, cx| {
+                                    let result = DotEntrySettings::save(*checked);
+                                    if result.is_ok() {
+                                        this.hide_dot_entries = *checked;
+                                        if *checked {
+                                            if !this.has_pending_text_preview(cx)
+                                                && this.preview.as_ref().is_some_and(|preview| {
+                                                    is_dot_path(preview.entry.key())
+                                                })
+                                            {
+                                                this.close_preview();
                                             }
-                                            let mut prefix = this.prefix.as_str();
-                                            while *checked && is_dot_path(prefix) {
-                                                prefix = parent_prefix(prefix);
-                                            }
-                                            if prefix != this.prefix {
-                                                this.set_location(prefix.to_owned(), cx);
-                                            } else {
-                                                this.rebuild_tree();
-                                                if this
-                                                    .tree_selected
-                                                    .as_deref()
-                                                    .is_some_and(|key| *checked && is_dot_path(key))
-                                                {
-                                                    this.tree_selected = Some(this.prefix.clone());
-                                                }
-                                                if this.selection().is_none() {
-                                                    this.selected = None;
-                                                }
+                                            if this
+                                                .create_draft
+                                                .as_ref()
+                                                .is_some_and(|draft| is_dot_path(&draft.prefix))
+                                            {
+                                                this.create_draft = None;
                                             }
                                         }
-                                        this.settings_saved(result, "外观设置已保存", cx);
-                                    })),
-                            ),
+                                        let mut prefix = this.prefix.as_str();
+                                        while *checked && is_dot_path(prefix) {
+                                            prefix = parent_prefix(prefix);
+                                        }
+                                        if prefix != this.prefix {
+                                            this.set_location(prefix.to_owned(), cx);
+                                        } else {
+                                            this.rebuild_tree();
+                                            if this
+                                                .tree_selected
+                                                .as_deref()
+                                                .is_some_and(|key| *checked && is_dot_path(key))
+                                            {
+                                                this.tree_selected = Some(this.prefix.clone());
+                                            }
+                                            if this.selection().is_none() {
+                                                this.selected = None;
+                                            }
+                                        }
+                                    }
+                                    this.settings_saved(result, "外观设置已保存", cx);
+                                })),
+                        ),
                     ),
             )
             .into_any_element()
@@ -343,34 +340,35 @@ impl Browser {
             )
             .child(
                 Form::horizontal().small().child(
-                    Field::new()
-                        .label("显示时区")
-                        .description("留空跟随系统。可输入 Asia/Shanghai、Asia/Tokyo 或 UTC。")
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_2()
-                                .child(div().w_64().min_w_0().child(
+                    Field::new().label("显示时区").child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div().w_64().min_w_0().child(
                                     Input::new(&self.time_zone_input).aria_label("显示时区"),
-                                ))
-                                .child(Button::new("save-time-zone").label("保存").on_click(
-                                    cx.listener(|this, _, _, cx| {
-                                        let result = (|| {
-                                            let zone = DisplayTimeZone::parse(
-                                                &this.time_zone_input.read(cx).value(),
-                                            )?;
-                                            zone.save()?;
-                                            this.time_zone = zone;
-                                            Ok(())
-                                        })();
-                                        this.settings_saved(result, "显示时区已保存", cx);
-                                    }),
-                                )),
-                        ),
+                                ),
+                            )
+                            .child(
+                                Button::new("save-time-zone").label("保存").on_click(
+                                    cx.listener(|this, _, _, cx| this.save_time_zone(cx)),
+                                ),
+                            ),
+                    ),
                 ),
             )
             .into_any_element()
+    }
+
+    pub(super) fn save_time_zone(&mut self, cx: &mut Context<Self>) {
+        let result = (|| {
+            let zone = DisplayTimeZone::parse(&self.time_zone_input.read(cx).value())?;
+            zone.save()?;
+            self.time_zone = zone;
+            Ok(())
+        })();
+        self.settings_saved(result, "显示时区已保存", cx);
     }
 
     fn preview_settings(&self, cx: &Context<Self>) -> AnyElement {
@@ -386,65 +384,53 @@ impl Browser {
             )
             .child(
                 Form::horizontal().small().child(
-                    Field::new()
-                        .label("文本预览上限")
-                        .description("PDF、Office 文档和图片最多 100 MB。")
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap_2()
-                                .child(
-                                    div().w_24().child(
-                                        Input::new(&self.preview_limit_input)
-                                            .aria_label("文本预览大小上限（MB）"),
-                                    ),
-                                )
-                                .child(
-                                    div()
-                                        .text_sm()
-                                        .text_color(cx.theme().muted_foreground)
-                                        .child("MB"),
-                                )
-                                .child(
-                                    Button::new("save-preview-settings").label("保存").on_click(
-                                        cx.listener(|this, _, _, cx| {
-                                            this.save_preview_settings(cx)
-                                        }),
-                                    ),
+                    Field::new().label("文本预览上限").child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div().w_24().child(
+                                    Input::new(&self.preview_limit_input)
+                                        .aria_label("文本预览大小上限（MB）"),
                                 ),
-                        ),
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child("MB"),
+                            )
+                            .child(Button::new("save-preview-settings").label("保存").on_click(
+                                cx.listener(|this, _, _, cx| this.save_preview_settings(cx)),
+                            )),
+                    ),
                 ),
             );
         #[cfg(windows)]
         let view = view.child(
             Form::horizontal().small().child(
-                Field::new()
-                    .label("预览磁盘缓存")
-                    .description("清理闲置缓存，正在使用的预览会保留。")
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(if self.preview_cache_busy {
-                                "正在检查".to_owned()
-                            } else {
-                                self.preview_cache_usage.map_or_else(
-                                    || "占用未知".into(),
-                                    |bytes| size_label(bytes as i64),
-                                )
-                            })
-                            .child(
-                                Button::new("clear-preview-cache")
-                                    .small()
-                                    .label("清理缓存")
-                                    .disabled(self.preview_cache_busy)
-                                    .on_click(cx.listener(|this, _, _, cx| {
-                                        this.update_preview_cache(true, cx)
-                                    })),
-                            ),
-                    ),
+                Field::new().label("预览磁盘缓存").child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(if self.preview_cache_busy {
+                            "正在检查".to_owned()
+                        } else {
+                            self.preview_cache_usage
+                                .map_or_else(|| "占用未知".into(), |bytes| size_label(bytes as i64))
+                        })
+                        .child(
+                            Button::new("clear-preview-cache")
+                                .small()
+                                .label("清理缓存")
+                                .disabled(self.preview_cache_busy)
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.update_preview_cache(true, cx)
+                                })),
+                        ),
+                ),
             ),
         );
         view.into_any_element()
@@ -455,33 +441,42 @@ impl Browser {
             .flex()
             .flex_col()
             .gap_5()
-            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child("传输"))
-            .child(
-                Form::horizontal().small()
-                    .child(
-                        Field::new()
-                            .label("传输并发数")
-                            .description("上传、下载和 S3 服务端复制分别使用此上限。")
-                            .child(div().w_24().child(Input::new(&self.transfer_parallelism_input)
-                                .aria_label("传输并发数"))),
-                    ),
-            )
             .child(
                 div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(Button::new("save-transfer-settings").label("保存").on_click(
-                        cx.listener(|this, _, _, cx| this.save_transfer_settings(cx)),
-                    ))
-                    .child(div().text_sm().text_color(cx.theme().muted_foreground).child(
-                        format!("可设为 1–{MAX_TRANSFER_PARALLELISM}。降低上限时，进行中的请求会先完成。"),
-                    )),
+                    .text_xl()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("传输"),
+            )
+            .child(
+                Form::horizontal().small().child(
+                    Field::new()
+                        .label("传输并发数")
+                        .description("上传、下载和 S3 服务端复制分别使用此上限。")
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    div().w_24().child(
+                                        Input::new(&self.transfer_parallelism_input)
+                                            .aria_label("传输并发数"),
+                                    ),
+                                )
+                                .child(
+                                    Button::new("save-transfer-settings")
+                                        .label("保存")
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            this.save_transfer_settings(cx)
+                                        })),
+                                ),
+                        ),
+                ),
             )
             .into_any_element()
     }
 
-    fn save_transfer_settings(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn save_transfer_settings(&mut self, cx: &mut Context<Self>) {
         let result = (|| {
             let limit = self
                 .transfer_parallelism_input
@@ -501,7 +496,10 @@ impl Browser {
 
     fn startup_settings(&self, cx: &Context<Self>) -> AnyElement {
         use crate::services::startup::Registration;
-        let current = self.startup.as_ref().ok() == Some(&Registration::Current);
+        let enabled = matches!(
+            self.startup,
+            Ok(Registration::Current | Registration::DifferentCommand)
+        );
         let different = self.startup.as_ref().ok() == Some(&Registration::DifferentCommand);
         div()
             .flex()
@@ -517,64 +515,44 @@ impl Browser {
                 Form::horizontal().small().child(
                     Field::new()
                         .label("登录启动")
-                        .description("登录 Windows 后在托盘运行同步。点击托盘图标打开主窗口。")
+                        .description("登录 Windows 后在托盘运行同步。")
                         .child(
                             div()
                                 .flex()
                                 .flex_col()
                                 .items_start()
                                 .gap_2()
-                                .when(different, |view| {
-                                    view.child("已注册的启动命令与当前程序不同。")
-                                })
-                                .children(self.startup.as_ref().err().cloned())
                                 .child(
-                                    div().child(
-                                        Button::new("toggle-startup")
-                                            .label(if different {
-                                                "更新登录启动路径"
-                                            } else if current {
-                                                "关闭登录启动"
-                                            } else {
-                                                "开启登录启动"
-                                            })
-                                            .disabled(!cfg!(windows))
-                                            .on_click(cx.listener(move |this, _, _, cx| {
-                                                let result =
-                                                    crate::services::startup::set(!current);
-                                                this.startup =
-                                                    crate::services::startup::registered()
-                                                        .map_err(|error| error.to_string().into());
-                                                this.settings_saved(result, "启动设置已更新", cx);
-                                            })),
-                                    ),
+                                    Switch::new("toggle-startup")
+                                        .accessibility_label("登录启动")
+                                        .checked(enabled)
+                                        .disabled(!cfg!(windows))
+                                        .on_change(cx.listener(|this, checked: &bool, _, cx| {
+                                            this.set_startup(*checked, cx);
+                                        })),
                                 )
+                                .children(self.startup.as_ref().err().cloned())
                                 .when(different, |view| {
-                                    view.child(
-                                        div().child(
-                                            Button::new("disable-stale-startup")
-                                                .ghost()
-                                                .label("关闭登录启动")
-                                                .on_click(cx.listener(|this, _, _, cx| {
-                                                    let result =
-                                                        crate::services::startup::set(false);
-                                                    this.startup =
-                                                        crate::services::startup::registered()
-                                                            .map_err(|error| {
-                                                                error.to_string().into()
-                                                            });
-                                                    this.settings_saved(
-                                                        result,
-                                                        "启动设置已更新",
-                                                        cx,
-                                                    );
-                                                })),
-                                        ),
+                                    view.child("已注册的启动命令与当前程序不同。").child(
+                                        Button::new("update-startup-path")
+                                            .small()
+                                            .outline()
+                                            .label("更新路径")
+                                            .on_click(cx.listener(|this, _, _, cx| {
+                                                this.set_startup(true, cx);
+                                            })),
                                     )
                                 }),
                         ),
                 ),
             )
             .into_any_element()
+    }
+
+    fn set_startup(&mut self, enabled: bool, cx: &mut Context<Self>) {
+        use crate::services::startup;
+        let result = startup::set(enabled);
+        self.startup = startup::registered().map_err(|error| error.to_string().into());
+        self.settings_saved(result, "启动设置已更新", cx);
     }
 }

@@ -795,6 +795,7 @@ impl Browser {
             .into_any_element()
         } else {
             let loading = self.loading_folders.contains(&self.prefix);
+            let listing = self.listings.get(&self.prefix);
             div()
                 .size_full()
                 .flex()
@@ -809,14 +810,20 @@ impl Browser {
                 })
                 .child(if loading {
                     "正在读取目录"
-                } else if !self.listings.contains_key(&self.prefix) {
+                } else if listing.is_none() {
                     "目录尚未读取，按 F5 重试"
+                } else if listing.is_some_and(|rows| !rows.is_empty()) {
+                    "此目录中的项目已隐藏"
                 } else {
                     "此目录为空"
                 })
-                .when(!loading, |body| {
-                    body.child(div().text_sm().child("拖放文件或文件夹到这里上传"))
-                })
+                .when(
+                    !loading
+                        && listing.is_some_and(Vec::is_empty)
+                        && self.busy.is_none()
+                        && !self.folder_write_locked(&self.prefix),
+                    |body| body.child(div().text_sm().child("拖放文件或文件夹到这里上传")),
+                )
                 .into_any_element()
         };
         let sidebar = self.bucket_sidebar(

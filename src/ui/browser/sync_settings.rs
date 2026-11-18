@@ -1,4 +1,12 @@
 use super::{sync_tasks::SyncDetailTab, *};
+use crate::services::sync::Direction;
+use gpui_kit::component::radio::{Radio, RadioGroup};
+
+const SYNC_DIRECTIONS: [(Direction, &str); 3] = [
+    (Direction::Upload, "upload"),
+    (Direction::Download, "download"),
+    (Direction::Both, "both"),
+];
 
 impl Browser {
     fn choose_sync_remote(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -274,7 +282,6 @@ impl Browser {
         window: &Window,
         cx: &App,
     ) -> AnyElement {
-        use crate::services::sync::Direction;
         let busy = self.busy.is_some();
         let theme = cx.theme();
         let can_browse =
@@ -336,20 +343,23 @@ impl Browser {
                         ),
                     )),
             )
-            .child(div().flex().items_center().gap_2().children(
-                [Direction::Upload, Direction::Download, Direction::Both].map(|direction| {
-                    Button::new(direction.label())
-                        .small()
-                        .ghost()
-                        .label(direction.label())
-                        .selected(direction == self.sync_direction)
-                        .disabled(busy)
-                        .on_click(window.listener_for(owner, move |this, _, _, cx| {
-                            this.sync_direction = direction;
-                            cx.notify();
-                        }))
-                }),
-            ))
+            .child(
+                RadioGroup::horizontal("sync-direction")
+                    .children(
+                        SYNC_DIRECTIONS
+                            .map(|(direction, id)| Radio::new(id).label(direction.label())),
+                    )
+                    .selected_index(
+                        SYNC_DIRECTIONS
+                            .iter()
+                            .position(|(direction, _)| *direction == self.sync_direction),
+                    )
+                    .disabled(busy)
+                    .on_change(window.listener_for(owner, |this, index: &usize, _, cx| {
+                        this.sync_direction = SYNC_DIRECTIONS[*index].0;
+                        cx.notify();
+                    })),
+            )
             .child(
                 div()
                     .text_sm()
@@ -502,16 +512,57 @@ impl Browser {
                     .flex_shrink_0()
                     .label("移除任务")
                     .disabled(self.busy.is_some() || self.sync.read(cx).running() == Some(id))
-                    .on_click(cx.listener(move |this, _, _, cx| {
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.confirm_remove_sync_job(id, window, cx);
+                    })),
+            )
+            .into_any_element()
+    }
+
+    fn confirm_remove_sync_job(&self, id: uuid::Uuid, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(job) = self.sync.read(cx).jobs().iter().find(|job| job.id == id) else {
+            return;
+        };
+        let description = format!(
+            "{}\ns3://{}/{}\n\n任务的同步历史也会移除。本地文件和 S3 对象将保留。",
+            job.folder.display(),
+            job.bucket,
+            job.prefix,
+        );
+        let owner = cx.weak_entity();
+        window.open_alert_dialog(cx, move |dialog, _, _| {
+            let owner = owner.clone();
+            dialog
+                .confirm()
+                .title("移除同步任务？")
+                .description(description.clone())
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text("移除任务")
+                        .cancel_text("取消")
+                        .ok_variant(ButtonVariant::Danger),
+                )
+                .on_ok(move |_, _, cx| {
+                    let _ = owner.update(cx, |this, cx| {
+                        if this.busy.is_some() {
+                            this.show_notice("请等当前操作结束后再移除任务", cx);
+                            return;
+                        }
                         let mut jobs = this.sync.read(cx).jobs().to_vec();
+                        let count = jobs.len();
                         jobs.retain(|job| job.id != id);
+                        if jobs.len() == count {
+                            return;
+                        }
+                        // The task may have started while the confirmation was open.
                         let result = this
                             .sync
                             .update(cx, |service, cx| service.save_jobs(jobs, cx));
                         this.settings_saved(result, "同步任务已移除", cx);
-                    })),
-            )
-            .into_any_element()
+                    });
+                    true
+                })
+        });
     }
 
     pub(super) fn sync_policy_controls(
@@ -601,13 +652,6 @@ impl Browser {
                                 this.update_sync_trigger(id, |job| job.watch_local = *checked, cx);
                             })),
                     )
-                    .when(job.watch_local, |form| {
-                        form.child(
-                            div()
-                                .text_color(cx.theme().muted_foreground)
-                                .child("包含子目录。S3 端的变化由定时探测发现。"),
-                        )
-                    })
                     .when_some(
                         self.sync.read(cx).directory_watch_error(id),
                         |form, error| {

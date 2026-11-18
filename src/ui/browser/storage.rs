@@ -129,7 +129,10 @@ impl Browser {
         cx.notify();
     }
 
-    fn save_quota(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn save_quota(&mut self, cx: &mut Context<Self>) {
+        if self.busy.is_some() {
+            return;
+        }
         let result = (|| {
             let profile = self.connected_profile.context("请先保存并连接凭证。")?;
             let bucket = self.store.as_ref().context("请先打开存储桶。")?.bucket();
@@ -179,9 +182,8 @@ impl Browser {
                                 .disabled(self.usage_scan.is_some())
                                 .on_click(cx.listener(|this, _, _, cx| this.measure_usage(true, cx))))))
                     .child(Field::new().label("本地参考上限")
-                        .description("留空可清除本地参考上限。")
                         .child(div().flex().items_center().gap_2()
-                            .child(div().w_24().child(Input::new(&self.quota_input)
+                            .child(div().w_32().child(Input::new(&self.quota_input)
                                 .aria_label("本地参考上限").disabled(busy)))
                             .child(div().text_sm().text_color(cx.theme().muted_foreground).child("MiB"))
                             .child(Button::new("save-quota").label("保存")

@@ -408,6 +408,7 @@ pub(crate) struct Browser {
     tasks_maximized: bool,
     trash: Option<Vec<TrashEntry>>,
     trash_retention: TrashRetention,
+    trash_cleanup_draft: bool,
     trash_days_input: Entity<InputState>,
     next_trash_cleanup: Instant,
     tasks_focus: FocusHandle,
@@ -541,8 +542,11 @@ impl Browser {
                 }
             }
         });
-        let transfer_parallelism_input =
-            cx.new(|cx| InputState::new(window, cx).default_value(transfer_limit.to_string()));
+        let transfer_parallelism_input = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(format!("1–{MAX_TRANSFER_PARALLELISM}"))
+                .default_value(transfer_limit.to_string())
+        });
         let hide_dot_entries = DotEntrySettings::load().unwrap_or_else(|failure| {
             if error.is_none() {
                 error = Some(format!("{failure:#}").into());
@@ -557,7 +561,7 @@ impl Browser {
         });
         let time_zone_input = cx.new(|cx| {
             InputState::new(window, cx)
-                .placeholder("跟随系统")
+                .placeholder("跟随系统（如 Asia/Shanghai）")
                 .default_value(time_zone.name())
         });
         let preview_limit_input =
@@ -579,17 +583,58 @@ impl Browser {
         cx.observe(&sync, |this, _, cx| this.sync_changed(cx))
             .detach();
         let trash_retention = TrashRetention::load();
+        let trash_load_error = trash_retention
+            .as_ref()
+            .err()
+            .map(|error| format!("无法读取回收站设置：{error:#}"));
+        let trash_retention = trash_retention.unwrap_or_default();
+        let trash_cleanup_draft = trash_retention.days().is_some();
         let trash_days_input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .placeholder("0 或留空")
-                .default_value(
-                    trash_retention
-                        .as_ref()
-                        .ok()
-                        .and_then(TrashRetention::days)
-                        .map_or_else(String::new, |days| days.to_string()),
-                )
+            InputState::new(window, cx).default_value(
+                trash_retention
+                    .days()
+                    .map_or_else(String::new, |days| days.to_string()),
+            )
         });
+        let quota_input = cx.new(|cx| InputState::new(window, cx).placeholder("留空清除上限"));
+        for (page, field, save) in [
+            (
+                SettingsPage::DateTime,
+                &time_zone_input,
+                Self::save_time_zone as fn(&mut Self, &mut Context<Self>),
+            ),
+            (
+                SettingsPage::Preview,
+                &preview_limit_input,
+                Self::save_preview_settings,
+            ),
+            (
+                SettingsPage::Transfer,
+                &transfer_parallelism_input,
+                Self::save_transfer_settings,
+            ),
+            (SettingsPage::Storage, &quota_input, Self::save_quota),
+            (
+                SettingsPage::Trash,
+                &trash_days_input,
+                Self::save_trash_retention,
+            ),
+        ] {
+            cx.subscribe(field, move |this, _, event: &InputEvent, cx| {
+                if this.settings_page == Some(page)
+                    && matches!(
+                        event,
+                        InputEvent::PressEnter {
+                            secondary: false,
+                            shift: false
+                        }
+                    )
+                {
+                    save(this, cx);
+                }
+            })
+            .detach();
+        }
         let executor = cx.background_executor().clone();
         cx.spawn(async move |view, cx| {
             loop {
@@ -607,12 +652,8 @@ impl Browser {
         if let Some(error) = &error {
             output.push_front(LogEntry::new(None, true, error.clone()));
         }
-        if let Err(error) = &trash_retention {
-            output.push_front(LogEntry::new(
-                None,
-                true,
-                format!("无法读取回收站设置：{error:#}"),
-            ));
+        if let Some(error) = trash_load_error {
+            output.push_front(LogEntry::new(None, true, error));
         }
         Self {
             runtime,
@@ -630,7 +671,7 @@ impl Browser {
             #[cfg(windows)]
             preview_cache_busy: false,
             quotas: BucketQuotas::load().unwrap_or_default(),
-            quota_input: cx.new(|cx| InputState::new(window, cx)),
+            quota_input,
             bucket_usage: None,
             server_capacity: None,
             quota_query_failed: false,
@@ -720,7 +761,8 @@ impl Browser {
             show_tasks: false,
             tasks_maximized: false,
             trash: None,
-            trash_retention: trash_retention.unwrap_or_default(),
+            trash_retention,
+            trash_cleanup_draft,
             trash_days_input,
             next_trash_cleanup: Instant::now(),
             tasks_focus: cx.focus_handle().tab_stop(true),

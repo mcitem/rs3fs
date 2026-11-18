@@ -1,5 +1,10 @@
 use super::*;
 use crate::services::sync::{Direction, PlanItem, SyncJob};
+use gpui_kit::component::{
+    clipboard::Clipboard,
+    notification::Notification,
+    tab::{Tab, TabBar},
+};
 use std::collections::BTreeMap;
 
 const SYNC_PREVIEW_PAGE_SIZE: usize = 20;
@@ -1041,28 +1046,30 @@ impl Browser {
                             ))),
                     )
                     .child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .gap_2()
-                            .pb_2()
-                            .border_b_1()
-                            .border_color(cx.theme().border)
-                            .children(SyncDetailTab::ALL.map(|(target, label)| {
-                                let tab = tab.clone();
-                                Button::new(label)
-                                    .small()
-                                    .ghost()
-                                    .label(label)
-                                    .selected(active_tab == target)
-                                    .on_click(move |_, window, cx| {
-                                        tab.update(cx, |value, cx| {
-                                            *value = target;
-                                            cx.notify();
-                                        });
-                                        window.refresh();
-                                    })
-                            })),
+                        TabBar::new((
+                            ElementId::from("sync-detail-tabs"),
+                            SharedString::from(id.to_string()),
+                        ))
+                        .small()
+                        .pill()
+                        .menu(true)
+                        .children(SyncDetailTab::ALL.map(|(_, label)| Tab::new().label(label)))
+                        .selected_index(
+                            SyncDetailTab::ALL
+                                .iter()
+                                .position(|(target, _)| *target == active_tab)
+                                .expect("all sync detail tabs are listed"),
+                        )
+                        .on_click({
+                            let tab = tab.clone();
+                            move |index, window, cx| {
+                                tab.update(cx, |value, cx| {
+                                    *value = SyncDetailTab::ALL[*index].0;
+                                    cx.notify();
+                                });
+                                window.refresh();
+                            }
+                        }),
                     )
                     .child(body),
             )
@@ -1276,15 +1283,17 @@ impl Browser {
             .when_some(
                 crate::services::sync::local_recovery_folder().ok(),
                 |body, folder| {
-                    let path = folder.display().to_string();
                     body.child(
                         div().child(
-                            Button::new("copy-sync-recovery-location")
+                            Clipboard::new("copy-sync-recovery-location")
                                 .small()
-                                .outline()
                                 .label("复制本地恢复目录")
-                                .on_click(move |_, _, cx| {
-                                    cx.write_to_clipboard(ClipboardItem::new_string(path.clone()));
+                                .value(folder.display().to_string())
+                                .on_copied(|_, window, cx| {
+                                    window.push_notification(
+                                        Notification::success("已复制恢复目录路径"),
+                                        cx,
+                                    );
                                 }),
                         ),
                     )

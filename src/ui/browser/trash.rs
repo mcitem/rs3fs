@@ -2,31 +2,78 @@ use super::*;
 
 impl Browser {
     pub(super) fn trash_settings(&self, cx: &Context<Self>) -> AnyElement {
-        div().flex().flex_col().gap_3()
-            .child(div().text_xl().font_weight(FontWeight::SEMIBOLD).child("回收站"))
-            .child("设置回收记录的保留天数。输入 0 或留空后保存，可关闭自动清理。")
-            .child(div().flex().items_center().gap_2()
-                .child("保留天数")
-                .child(div().w_40().child(Input::new(&self.trash_days_input).small().aria_label("保留天数")))
-                .child(Button::new("save-trash-retention").small().label("保存")
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        let result = (|| {
-                            let value = this.trash_days_input.read(cx).value();
-                            let days = match value.trim() {
-                                "" => None,
-                                value => Some(value.parse::<u32>().context("请输入整数天数")?),
-                            };
-                            let policy = TrashRetention::new(days)?;
-                            policy.save()?;
-                            this.trash_retention = policy;
-                            this.next_trash_cleanup = Instant::now();
-                            Ok(())
-                        })();
-                        this.settings_saved(result, "回收站设置已保存", cx);
-                    }))))
-            .child(div().text_sm().text_color(cx.theme().muted_foreground)
-                .child("应用窗口打开时，每小时检查当前打开的存储桶。到期项目将永久删除，未完成的回收记录会保留。"))
+        div()
+            .flex()
+            .flex_col()
+            .gap_5()
+            .child(
+                div()
+                    .text_xl()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("回收站"),
+            )
+            .child(
+                Form::horizontal()
+                    .small()
+                    .child(
+                        Field::new()
+                            .label("自动清理过期项目")
+                            .description("保存后生效。到期项目将永久删除。")
+                            .child(
+                                Switch::new("trash-auto-cleanup")
+                                    .accessibility_label("自动清理过期项目")
+                                    .checked(self.trash_cleanup_draft)
+                                    .on_change(cx.listener(|this, checked: &bool, _, cx| {
+                                        this.trash_cleanup_draft = *checked;
+                                        cx.notify();
+                                    })),
+                            ),
+                    )
+                    .child(
+                        Field::new().label("保留天数").child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap_2()
+                                .child(
+                                    div().w_24().child(
+                                        Input::new(&self.trash_days_input)
+                                            .aria_label("保留天数")
+                                            .disabled(!self.trash_cleanup_draft),
+                                    ),
+                                )
+                                .child(Button::new("save-trash-retention").label("保存").on_click(
+                                    cx.listener(|this, _, _, cx| {
+                                        this.save_trash_retention(cx);
+                                    }),
+                                )),
+                        ),
+                    ),
+            )
             .into_any_element()
+    }
+
+    pub(super) fn save_trash_retention(&mut self, cx: &mut Context<Self>) {
+        let result = (|| {
+            let days = if self.trash_cleanup_draft {
+                let days = self.trash_days_input.read(cx).value();
+                Some(
+                    days.trim()
+                        .parse::<u32>()
+                        .ok()
+                        .filter(|days| (1..=3650).contains(days))
+                        .context("保留天数须为 1 到 3650 天。")?,
+                )
+            } else {
+                None
+            };
+            let policy = TrashRetention::new(days)?;
+            policy.save()?;
+            self.trash_retention = policy;
+            self.next_trash_cleanup = Instant::now();
+            Ok(())
+        })();
+        self.settings_saved(result, "回收站设置已保存", cx);
     }
 
     pub(super) fn trash_busy(&self) -> bool {
