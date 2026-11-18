@@ -1,4 +1,4 @@
-本项目由 OpenAI GPT-6.1 Sol（Codex）参与开发。
+本项目由 OpenAI GPT-6.2 Sol（Codex）参与开发。
 
 # rs3fs
 
